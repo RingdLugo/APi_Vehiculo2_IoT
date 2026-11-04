@@ -432,6 +432,10 @@ Actualizar un paso:
 
 La API usa procedimientos almacenados parametrizados para comunicarse con MySQL. Esta es la lista de **21 operaciones principales** de la guía técnica y dónde se ejecutan:
 
+### Manuscrito visual
+
+![Manuscrito visual del funcionamiento de las 21 operaciones principales de la API Vehículo IoT](docs/manuscrito_21_operaciones.svg)
+
 | # | Stored Procedure | Dónde se usa |
 |---:|---|---|
 | 1 | `sp_obtener_vehiculos` | GET `/vehiculos/` |
