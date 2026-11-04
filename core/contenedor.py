@@ -1,15 +1,14 @@
 from config.database import DatabaseConnection
-from repositories.base_repository import RepositorioCRUD
 from repositories.comando_repository import ComandoRepository
 from repositories.demo_repository import DemoRepository
 from repositories.estado_historial_repository import EstadoHistorialRepository
 from repositories.vehiculo_repository import VehiculoRepository
+from services.eliminacion_service import EliminacionService
 from services.operacion_service import OperacionService
 from ws_manager.manager import ConnectionManager
 
 
 class Contenedor:
-    """Raíz de composición: crea UNA vez cada objeto y le inyecta sus dependencias."""
 
     def __init__(self):
         self.db = DatabaseConnection()
@@ -20,6 +19,7 @@ class Contenedor:
         self.estado_repo = EstadoHistorialRepository(self.db)
 
         self.manager = ConnectionManager(self.estado_repo)
+        self.eliminacion_service = EliminacionService()
         self.operacion_service = OperacionService(
             vehiculo_repo=self.vehiculo_repo,
             comando_repo=self.comando_repo,
@@ -27,6 +27,3 @@ class Contenedor:
             estado_repo=self.estado_repo,
             manager=self.manager,
         )
-
-    def repositorios_crud(self) -> list[RepositorioCRUD]:
-        return [self.vehiculo_repo, self.comando_repo, self.demo_repo]

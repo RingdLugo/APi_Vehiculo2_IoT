@@ -3,7 +3,6 @@ from repositories.base_repository import BaseRepository
 
 
 class EstadoHistorialRepository(BaseRepository):
-    """Estado actual e historial de movimientos individuales."""
 
     LIMITE_HISTORIAL = 10
 
@@ -21,11 +20,6 @@ class EstadoHistorialRepository(BaseRepository):
     def actualizar_estado(self, vehiculo_id: int, comando_id: int, origen: str):
         """sp_actualizar_estado (movimientos individuales y DEMO)."""
         self._escribir("sp_actualizar_estado", (vehiculo_id, comando_id, origen))
-        return True
-
-    def registrar_historial(self, vehiculo_id: int, comando_id: int, origen: str):
-        """sp_registrar_historial (exclusivo de movimientos individuales)."""
-        self._escribir("sp_registrar_historial", (vehiculo_id, comando_id, origen))
         return True
 
     def registrar_movimiento_atomico(self, vehiculo_id: int, comando_id: int, origen: str):

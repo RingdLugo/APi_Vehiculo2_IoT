@@ -39,6 +39,7 @@ class ConnectionManager:
             del self.__conexiones[vehiculo_id]
 
     def total_conexiones(self, vehiculo_id: int) -> int:
+        """Cuántos clientes (navegadores, ESP...) escuchan a ese vehículo."""
         return len(self.__conexiones.get(vehiculo_id, []))
 
     async def enviar_a_cliente(self, websocket: WebSocket, evento: Evento):
@@ -50,7 +51,7 @@ class ConnectionManager:
         if not conexiones:
             return
 
-        carga = evento.a_diccionario()      # polimorfismo: cada evento arma su propio JSON
+        carga = evento.a_diccionario()
         resultados = await asyncio.gather(
             *(c.send_json(carga) for c in conexiones), return_exceptions=True
         )

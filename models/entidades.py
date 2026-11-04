@@ -28,8 +28,18 @@ class Comando(Entidad):
     def codigo(self):
         return self.obtener("codigo")
 
+    @property
+    def mascara(self):
+        """Valor de 16 bits que se envía a los 74HC595 (None = sin configurar)."""
+        valor = self.obtener("mascara")
+        return None if valor is None else int(valor)
+
+    def tiene_mascara(self) -> bool:
+        return self.mascara is not None
+
     def describir(self) -> str:
-        return f"Comando #{self.id} '{self.nombre}' (código {self.codigo})"
+        mascara = f"0x{self.mascara:04X}" if self.tiene_mascara() else "sin máscara"
+        return f"Comando #{self.id} '{self.nombre}' (código {self.codigo}, {mascara})"
 
 
 class Demo(Entidad):
@@ -53,7 +63,7 @@ class MovimientoDemo(Entidad):
 
     @property
     def _claves_id(self) -> tuple:
-        return ("id_movimiento", "id_movimiento_demo", "id")
+        return ("id_demo_movimiento", "id_movimiento", "id")
 
     @property
     def comando_id(self):

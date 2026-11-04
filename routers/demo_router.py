@@ -7,15 +7,18 @@ from routers.base_controller import BaseController
 from schemas.gestion_schema import (
     DemoActualizar, DemoCrear, MovimientoDemoActualizar, MovimientoDemoCrear,
 )
+from services.eliminacion_service import EliminacionService
 from ws_manager.manager import ConnectionManager
 
 
 class DemoController(BaseController):
     """Endpoints de gestión de DEMOs y sus movimientos."""
 
-    def __init__(self, demo_repo: DemoRepository, manager: ConnectionManager):
+    def __init__(self, demo_repo: DemoRepository, manager: ConnectionManager,
+                 eliminacion_service: EliminacionService):
         self._demo_repo = demo_repo
         self._manager = manager
+        self._eliminacion = eliminacion_service
         super().__init__(prefix="/demos", tags=["DEMO"])
 
     def _registrar_rutas(self) -> None:
@@ -53,7 +56,7 @@ class DemoController(BaseController):
         return self._demo_repo.actualizar_demo(demo_id, data.nombre, data.descripcion, data.activo)
 
     def eliminar_demo(self, demo_id: int):
-        return self._demo_repo.eliminar(demo_id)
+        return self._eliminacion.eliminar(self._demo_repo, demo_id)
 
     def agregar_movimiento(self, demo_id: int, data: MovimientoDemoCrear):
         return self._demo_repo.agregar_movimiento_demo(

@@ -1,5 +1,21 @@
 .venv/
 .env
+.env.*
+*.env
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Private keys, certificates, and local backups
+*.pem
+*.key
+*.p12
+*.pfx
+*.bak
+*.backup
+
+# Local Wi-Fi activity deliverables and embedded firmware
+/excavadora_esp/
+/wifi_configuracion/
+/VEHICULO_BIEN/
+/GUIA_CONFIGURACION_WIFI.pdf

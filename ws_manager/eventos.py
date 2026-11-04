@@ -55,16 +55,19 @@ class EventoConexion(Evento):
 
 
 class EventoMovimientoIndividual(Evento):
-    def __init__(self, vehiculo_id: int, comando_id: int, codigo, origen: str):
+    def __init__(self, vehiculo_id: int, comando_id: int, codigo, origen: str,
+                 nombre=None, mascara=None):
         super().__init__(vehiculo_id, comando_id, codigo)
         self.__origen = origen
+        self.__nombre = nombre
+        self.__mascara = mascara
 
     @property
     def tipo(self) -> str:
         return "movimiento_individual"
 
     def _datos_extra(self) -> dict:
-        return {"origen": self.__origen}
+        return {"origen": self.__origen, "nombre": self.__nombre, "mascara": self.__mascara}
 
 
 class EventoConsulta(Evento):
@@ -79,6 +82,21 @@ class EventoConsulta(Evento):
 
     def _datos_extra(self) -> dict:
         return {"recurso": self.__recurso, "datos": self.__datos}
+
+
+class EventoMensaje(Evento):
+    """Mensaje de texto libre para el dispositivo (sirve para probar la comunicación)."""
+
+    def __init__(self, vehiculo_id: int, texto: str):
+        super().__init__(vehiculo_id)
+        self.__texto = texto
+
+    @property
+    def tipo(self) -> str:
+        return "mensaje"
+
+    def _datos_extra(self) -> dict:
+        return {"texto": self.__texto}
 
 
 class EventoEco(Evento):
@@ -120,8 +138,10 @@ class EventoDemoInicio(EventoDemo):
 
 class EventoDemoMovimiento(EventoDemo):
     def __init__(self, vehiculo_id: int, demo_id: int, comando_id: int, codigo,
-                 orden: int, duracion_ms: int, pausa_ms: int):
+                 orden: int, duracion_ms: int, pausa_ms: int, nombre=None, mascara=None):
         super().__init__(vehiculo_id, demo_id, comando_id, codigo)
+        self.__nombre = nombre
+        self.__mascara = mascara
         self.__orden = orden
         self.__duracion_ms = duracion_ms
         self.__pausa_ms = pausa_ms
@@ -132,7 +152,8 @@ class EventoDemoMovimiento(EventoDemo):
 
     def _datos_extra(self) -> dict:
         return {**super()._datos_extra(), "orden": self.__orden,
-                "duracion_ms": self.__duracion_ms, "pausa_ms": self.__pausa_ms}
+                "duracion_ms": self.__duracion_ms, "pausa_ms": self.__pausa_ms,
+                "nombre": self.__nombre, "mascara": self.__mascara}
 
 
 class EventoDemoFin(EventoDemo):

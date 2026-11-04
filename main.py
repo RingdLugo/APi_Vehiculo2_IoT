@@ -47,12 +47,12 @@ class AplicacionAPI:
         c = self._c
         controladores: list[BaseController] = [
             VehiculoController(c.vehiculo_repo, c.comando_repo, c.estado_repo, c.demo_repo,
-                               c.operacion_service),
-            ComandoController(c.comando_repo, c.manager),
-            DemoController(c.demo_repo, c.manager),
+                               c.operacion_service, c.eliminacion_service),
+            ComandoController(c.comando_repo, c.manager, c.eliminacion_service),
+            DemoController(c.demo_repo, c.manager, c.eliminacion_service),
             WebSocketController(c.vehiculo_repo, c.manager),
         ]
-        for controlador in controladores:      # polimorfismo: todos responden a registrar()
+        for controlador in controladores:
             controlador.registrar(self.app)
 
     def _registrar_manejadores_errores(self) -> None:
@@ -70,6 +70,13 @@ class AplicacionAPI:
         codigo = exc.args[0] if exc.args and isinstance(exc.args[0], int) else None
         if codigo == 1644 and len(exc.args) > 1:
             return JSONResponse(status_code=400, content={"detail": str(exc.args[1])})
+        if codigo in (1305, 1054):
+            logger.error("Base de datos desactualizada: %s", exc)
+            return JSONResponse(status_code=500, content={"detail": (
+                f"El esquema de la base de datos no es compatible: "
+                f"{exc.args[1] if len(exc.args) > 1 else exc}. "
+                "Verifica que RDS tenga la columna comandos.mascara y los procedimientos "
+                "almacenados requeridos.")})
         logger.error("Error de base de datos: %s", exc)
         return JSONResponse(status_code=500,
                             content={"detail": "Error interno en el servidor de base de datos."})

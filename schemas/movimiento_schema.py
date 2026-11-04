@@ -10,3 +10,10 @@ class MovimientoIndividualRequest(BaseModel):
 class DemoRequest(BaseModel):
     """Cuerpo del POST que inicia una DEMO."""
     demo_id: int = Field(..., description="Identificador de la DEMO a ejecutar.", example=1)
+
+
+class MensajeRequest(BaseModel):
+    """Cuerpo del POST que envía un mensaje de texto al dispositivo."""
+    texto: str = Field(..., min_length=1, max_length=200,
+                       description="Texto que aparecerá en el Monitor Serie del Arduino.",
+                       example="Hola Arduino")

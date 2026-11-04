@@ -2,6 +2,8 @@ import asyncio
 import logging
 from typing import Optional
 
+import pymysql
+
 from models.entidades import Comando, MovimientoDemo
 from repositories.comando_repository import ComandoRepository
 from repositories.demo_repository import DemoRepository
@@ -9,7 +11,7 @@ from repositories.estado_historial_repository import EstadoHistorialRepository
 from repositories.vehiculo_repository import VehiculoRepository
 from ws_manager.eventos import (
     Evento, EventoDemoCancelada, EventoDemoError, EventoDemoFin, EventoDemoInicio,
-    EventoDemoMovimiento, EventoMovimientoIndividual,
+    EventoDemoMovimiento, EventoMensaje, EventoMovimientoIndividual,
 )
 from ws_manager.manager import ConnectionManager
 
@@ -27,11 +29,12 @@ class SesionDemo:
     """
 
     def __init__(self, vehiculo_id: int, demo_id: int, movimientos: list[MovimientoDemo],
-                 codigos: dict, estado_repo: EstadoHistorialRepository, manager: ConnectionManager):
+                 comandos: dict[int, Comando], estado_repo: EstadoHistorialRepository,
+                 manager: ConnectionManager):
         self.__vehiculo_id = vehiculo_id
         self.__demo_id = demo_id
         self.__movimientos = movimientos
-        self.__codigos = codigos
+        self.__comandos = comandos
         self.__estado_repo = estado_repo
         self.__manager = manager
         self.__cancelar = asyncio.Event()
@@ -61,9 +64,10 @@ class SesionDemo:
                     return
 
                 await asyncio.to_thread(self.__estado_repo.actualizar_estado, v, mov.comando_id, "DEMO")
+                comando = self.__comandos[mov.comando_id]
                 await self.__emitir(EventoDemoMovimiento(
-                    v, d, mov.comando_id, self.__codigos.get(mov.comando_id),
-                    mov.orden, mov.duracion_ms, mov.pausa_ms))
+                    v, d, mov.comando_id, comando.codigo, mov.orden,
+                    mov.duracion_ms, mov.pausa_ms, comando.nombre, comando.mascara))
 
                 try:
                     await asyncio.wait_for(self.__cancelar.wait(), timeout=mov.espera_total_segundos())
@@ -90,7 +94,8 @@ class OperacionService:
         self.__demo_repo = demo_repo
         self.__estado_repo = estado_repo
         self.__manager = manager
-        self.__sesiones: dict[int, Optional[SesionDemo]] = {}
+        self.__sesiones: dict[int, SesionDemo] = {}
+        self.__reservas: set[int] = set()
         self.__tareas: set[asyncio.Task] = set()
 
     async def _validar_vehiculo(self, vehiculo_id: int):
@@ -105,29 +110,58 @@ class OperacionService:
     def _buscar_comando(comandos: list[Comando], comando_id: int) -> Optional[Comando]:
         return next((c for c in comandos if c.id == comando_id and c.esta_activo()), None)
 
+    @staticmethod
+    def _exigir_mascara(comando: Comando) -> None:
+        """Sin máscara la ESP no sabría qué salidas activar: se rechaza antes de tocar la BD."""
+        if not comando.tiene_mascara():
+            raise ValueError(
+                f"El comando '{comando.nombre}' (id {comando.id}) no tiene máscara de salida configurada. "
+                f"Asígnala con POST /comandos/{comando.id}/mascara."
+            )
+
     def tiene_demo_activa(self, vehiculo_id: int) -> bool:
-        return vehiculo_id in self.__sesiones
+        return vehiculo_id in self.__sesiones or vehiculo_id in self.__reservas
 
     async def ejecutar_movimiento_individual(self, vehiculo_id: int, comando_id: int, origen: str):
         await self._validar_vehiculo(vehiculo_id)
 
-        comandos = await asyncio.to_thread(self.__comando_repo.obtener_por_vehiculo, vehiculo_id)
+        comandos = await asyncio.to_thread(self.__comando_repo.obtener_detalle_por_vehiculo, vehiculo_id)
         comando = self._buscar_comando(comandos, comando_id)
         if not comando:
             raise ValueError("El comando no existe, está inactivo o no pertenece a este vehículo.")
+        self._exigir_mascara(comando)
 
         try:
             await asyncio.to_thread(
                 self.__estado_repo.registrar_movimiento_atomico, vehiculo_id, comando_id, origen
             )
+        except pymysql.MySQLError:
+            raise
         except Exception as e:
             logger.exception("Fallo al registrar el movimiento individual")
             raise RuntimeError("Error de base de datos al registrar el movimiento.") from e
 
         await self.__manager.broadcast_to_vehicle(
-            EventoMovimientoIndividual(vehiculo_id, comando_id, comando.codigo, origen)
+            EventoMovimientoIndividual(vehiculo_id, comando_id, comando.codigo, origen,
+                                       comando.nombre, comando.mascara)
         )
         return {"mensaje": "Movimiento individual procesado y registrado en historial exitosamente."}
+
+    async def enviar_mensaje(self, vehiculo_id: int, texto: str):
+        """Envía un texto por el WebSocket del vehículo (no mueve nada ni escribe en la BD)."""
+        await self._validar_vehiculo(vehiculo_id)
+        await self.__manager.broadcast_to_vehicle(EventoMensaje(vehiculo_id, texto))
+
+        clientes = self.__manager.total_conexiones(vehiculo_id)
+        respuesta = {
+            "mensaje": "Mensaje enviado por WebSocket.",
+            "vehiculo_id": vehiculo_id,
+            "texto": texto,
+            "clientes_conectados": clientes,
+        }
+        if clientes == 0:
+            respuesta["aviso"] = "No hay ningún dispositivo conectado al WebSocket de este vehículo."
+        return respuesta
 
     async def iniciar_demo(self, vehiculo_id: int, demo_id: int):
         if self.tiene_demo_activa(vehiculo_id):
@@ -135,7 +169,7 @@ class OperacionService:
                 "Ya existe una DEMO en ejecución para este vehículo. Debe finalizar o cancelarse primero."
             )
 
-        self.__sesiones[vehiculo_id] = None     # reserva el cupo antes del primer await
+        self.__reservas.add(vehiculo_id)
         try:
             await self._validar_vehiculo(vehiculo_id)
 
@@ -149,14 +183,20 @@ class OperacionService:
                 raise ValueError("La DEMO no contiene movimientos registrados.")
             movimientos = sorted(movimientos, key=lambda m: m.orden)
 
-            comandos = await asyncio.to_thread(self.__comando_repo.obtener_por_vehiculo, vehiculo_id)
-            codigos = {c.id: c.codigo for c in comandos}
+            lista = await asyncio.to_thread(self.__comando_repo.obtener_detalle_por_vehiculo, vehiculo_id)
+            comandos = {c.id: c for c in lista}
+            for mov in movimientos:
+                comando = comandos.get(mov.comando_id)
+                if comando is None:
+                    raise ValueError(f"El paso {mov.orden} usa un comando que no pertenece a este vehículo.")
+                self._exigir_mascara(comando)
         except Exception:
-            self.__sesiones.pop(vehiculo_id, None)
+            self.__reservas.discard(vehiculo_id)
             raise
 
-        sesion = SesionDemo(vehiculo_id, demo_id, movimientos, codigos, self.__estado_repo, self.__manager)
+        sesion = SesionDemo(vehiculo_id, demo_id, movimientos, comandos, self.__estado_repo, self.__manager)
         self.__sesiones[vehiculo_id] = sesion
+        self.__reservas.discard(vehiculo_id)
         tarea = asyncio.create_task(self.__correr(sesion))
         self.__tareas.add(tarea)
         tarea.add_done_callback(self.__tareas.discard)

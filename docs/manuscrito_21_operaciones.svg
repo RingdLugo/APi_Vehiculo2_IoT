@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="2100" viewBox="0 0 1800 2100" role="img" aria-labelledby="title description">
+  <title id="title">Manuscrito visual: funcionamiento de 21 operaciones principales de la API Vehículo IoT</title>
+  <desc id="description">Infografía de las operaciones almacenadas para vehículos, comandos, demos, estado e historial, con sus rutas HTTP y el flujo de ejecución.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f8ff"/>
+      <stop offset="1" stop-color="#eaf3f7"/>
+    </linearGradient>
+    <linearGradient id="header" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#12345a"/>
+      <stop offset="1" stop-color="#087e8b"/>
+    </linearGradient>
+    <style>
+      .title { font: 700 48px Arial, sans-serif; fill: #fff; }
+      .subtitle { font: 400 24px Arial, sans-serif; fill: #dcecf5; }
+      .section { font: 700 26px Arial, sans-serif; fill: #12345a; }
+      .number { font: 700 20px Arial, sans-serif; fill: #fff; }
+      .procedure { font: 700 18px Consolas, monospace; fill: #12345a; }
+      .route { font: 600 16px Arial, sans-serif; fill: #087e8b; }
+      .copy { font: 400 17px Arial, sans-serif; fill: #34495e; }
+      .small-title { font: 700 24px Arial, sans-serif; fill: #12345a; }
+      .small-copy { font: 400 19px Arial, sans-serif; fill: #34495e; }
+      .foot { font: 400 16px Arial, sans-serif; fill: #526477; }
+    </style>
+  </defs>
+  <rect width="1800" height="2100" fill="url(#background)"/>
+  <rect x="0" y="0" width="1800" height="260" fill="url(#header)"/>
+  <circle cx="1630" cy="82" r="95" fill="#ffffff" opacity=".08"/>
+  <circle cx="1710" cy="220" r="125" fill="#ffffff" opacity=".06"/>
+  <text x="70" y="86" class="subtitle">MANUSCRITO VISUAL · API REST + MySQL + WebSocket seguro</text>
+  <text x="70" y="151" class="title">21 operaciones principales</text>
+  <text x="70" y="205" class="subtitle">Cómo se administran vehículos, comandos y secuencias automatizadas para el carrito IoT</text>
+
+  <rect x="60" y="292" width="1680" height="106" rx="18" fill="#fff" stroke="#d4e2eb" stroke-width="2"/>
+  <text x="88" y="333" class="small-title">Flujo general</text>
+  <text x="88" y="371" class="small-copy">Cliente / Swagger</text>
+  <text x="330" y="371" class="small-copy">→</text>
+  <text x="370" y="371" class="small-copy">Router FastAPI valida la solicitud</text>
+  <text x="770" y="371" class="small-copy">→</text>
+  <text x="810" y="371" class="small-copy">Servicio y repositorio ejecutan SP parametrizados</text>
+  <text x="1390" y="371" class="small-copy">→</text>
+  <text x="1430" y="371" class="small-copy">MySQL / WSS</text>
+
+  <text x="60" y="448" class="section">01 · Vehículos</text>
+  <text x="630" y="448" class="section">02 · Comandos</text>
+  <text x="1200" y="448" class="section">03 · DEMOs y pasos</text>
+
+  <g>
+    <rect x="60" y="472" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="91" cy="504" r="19" fill="#087e8b"/><text x="91" y="511" text-anchor="middle" class="number">1</text>
+    <text x="122" y="510" class="procedure">sp_obtener_vehiculos</text>
+    <text x="84" y="546" class="route">GET /vehiculos/</text>
+    <text x="84" y="578" class="copy">Devuelve el listado general de carritos registrados.</text>
+
+    <rect x="60" y="624" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="91" cy="656" r="19" fill="#087e8b"/><text x="91" y="663" text-anchor="middle" class="number">2</text>
+    <text x="122" y="662" class="procedure">sp_obtener_vehiculo</text>
+    <text x="84" y="698" class="route">GET /vehiculos/{vehiculo_id}</text>
+    <text x="84" y="730" class="copy">Busca un carrito por ID; la API responde 404 si no existe.</text>
+
+    <rect x="60" y="776" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="91" cy="808" r="19" fill="#087e8b"/><text x="91" y="815" text-anchor="middle" class="number">3</text>
+    <text x="122" y="814" class="procedure">sp_crear_vehiculo</text>
+    <text x="84" y="850" class="route">POST /vehiculos/</text>
+    <text x="84" y="882" class="copy">Registra un vehículo nuevo con nombre y descripción.</text>
+
+    <rect x="60" y="928" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="91" cy="960" r="19" fill="#087e8b"/><text x="91" y="967" text-anchor="middle" class="number">4</text>
+    <text x="122" y="966" class="procedure">sp_actualizar_vehiculo</text>
+    <text x="84" y="1002" class="route">POST /vehiculos/{vehiculo_id}/actualizar</text>
+    <text x="84" y="1034" class="copy">Actualiza nombre, descripción y disponibilidad.</text>
+
+    <rect x="60" y="1080" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="91" cy="1112" r="19" fill="#087e8b"/><text x="91" y="1119" text-anchor="middle" class="number">5</text>
+    <text x="122" y="1118" class="procedure">sp_eliminar_vehiculo</text>
+    <text x="84" y="1154" class="route">POST /vehiculos/{vehiculo_id}/eliminar</text>
+    <text x="84" y="1186" class="copy">Elimina el vehículo; la API bloquea si tiene DEMO activa.</text>
+  </g>
+
+  <g>
+    <rect x="630" y="472" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="661" cy="504" r="19" fill="#2878b5"/><text x="661" y="511" text-anchor="middle" class="number">6</text>
+    <text x="692" y="510" class="procedure">sp_obtener_comandos_vehiculo</text>
+    <text x="654" y="546" class="route">GET /comandos/vehiculo/{vehiculo_id}</text>
+    <text x="654" y="578" class="copy">Lista los comandos asociados al carrito y notifica la consulta.</text>
+
+    <rect x="630" y="624" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="661" cy="656" r="19" fill="#2878b5"/><text x="661" y="663" text-anchor="middle" class="number">7</text>
+    <text x="692" y="662" class="procedure">sp_obtener_comandos_detalle</text>
+    <text x="654" y="698" class="route">GET /comandos/vehiculo/{vehiculo_id}/detalle</text>
+    <text x="654" y="730" class="copy">Entrega comandos con su máscara de salida para el hardware.</text>
+
+    <rect x="630" y="776" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="661" cy="808" r="19" fill="#2878b5"/><text x="661" y="815" text-anchor="middle" class="number">8</text>
+    <text x="692" y="814" class="procedure">sp_crear_comando</text>
+    <text x="654" y="850" class="route">POST /comandos/</text>
+    <text x="654" y="882" class="copy">Crea la acción; la API asigna su máscara explícita o calculada.</text>
+
+    <rect x="630" y="928" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="661" cy="960" r="19" fill="#2878b5"/><text x="661" y="967" text-anchor="middle" class="number">9</text>
+    <text x="692" y="966" class="procedure">sp_actualizar_comando</text>
+    <text x="654" y="1002" class="route">POST /comandos/{comando_id}/actualizar</text>
+    <text x="654" y="1034" class="copy">Modifica datos y recalcula o guarda la máscara de salida.</text>
+
+    <rect x="630" y="1080" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="661" cy="1112" r="19" fill="#2878b5"/><text x="661" y="1119" text-anchor="middle" class="number">10</text>
+    <text x="692" y="1118" class="procedure">sp_eliminar_comando</text>
+    <text x="654" y="1154" class="route">POST /comandos/{comando_id}/eliminar</text>
+    <text x="654" y="1186" class="copy">Retira del catálogo el comando identificado.</text>
+  </g>
+
+  <g>
+    <rect x="1200" y="472" width="540" height="128" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="1231" cy="502" r="19" fill="#7255a5"/><text x="1231" y="509" text-anchor="middle" class="number">11</text>
+    <text x="1262" y="508" class="procedure">sp_obtener_demos</text>
+    <text x="1224" y="542" class="route">GET /demos/vehiculo/{vehiculo_id}</text>
+    <text x="1224" y="574" class="copy">Lista secuencias del carrito y notifica la consulta.</text>
+
+    <rect x="1200" y="612" width="540" height="128" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="1231" cy="642" r="19" fill="#7255a5"/><text x="1231" y="649" text-anchor="middle" class="number">12</text>
+    <text x="1262" y="648" class="procedure">sp_obtener_movimientos_demo</text>
+    <text x="1224" y="682" class="route">GET /demos/{demo_id}/movimientos</text>
+    <text x="1224" y="714" class="copy">Recupera los pasos que componen una secuencia.</text>
+
+    <rect x="1200" y="752" width="540" height="128" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="1231" cy="782" r="19" fill="#7255a5"/><text x="1231" y="789" text-anchor="middle" class="number">13</text>
+    <text x="1262" y="788" class="procedure">sp_crear_demo</text>
+    <text x="1224" y="822" class="route">POST /demos/</text>
+    <text x="1224" y="854" class="copy">Crea una secuencia asociada a un vehículo.</text>
+
+    <rect x="1200" y="892" width="540" height="128" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="1231" cy="922" r="19" fill="#7255a5"/><text x="1231" y="929" text-anchor="middle" class="number">14</text>
+    <text x="1262" y="928" class="procedure">sp_actualizar_demo</text>
+    <text x="1224" y="962" class="route">POST /demos/{demo_id}/actualizar</text>
+    <text x="1224" y="994" class="copy">Cambia nombre, descripción o estado de la DEMO.</text>
+
+    <rect x="1200" y="1032" width="540" height="128" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="1231" cy="1062" r="19" fill="#7255a5"/><text x="1231" y="1069" text-anchor="middle" class="number">15</text>
+    <text x="1262" y="1068" class="procedure">sp_eliminar_demo</text>
+    <text x="1224" y="1102" class="route">POST /demos/{demo_id}/eliminar</text>
+    <text x="1224" y="1134" class="copy">Elimina la secuencia indicada.</text>
+
+    <rect x="1200" y="1172" width="540" height="128" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="1231" cy="1202" r="19" fill="#7255a5"/><text x="1231" y="1209" text-anchor="middle" class="number">16</text>
+    <text x="1262" y="1208" class="procedure">sp_agregar_movimiento_demo</text>
+    <text x="1224" y="1242" class="route">POST /demos/{demo_id}/movimientos</text>
+    <text x="1224" y="1274" class="copy">Agrega comando, orden, duración y pausa a la secuencia.</text>
+
+    <rect x="1200" y="1312" width="540" height="128" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="1231" cy="1342" r="19" fill="#7255a5"/><text x="1231" y="1349" text-anchor="middle" class="number">17</text>
+    <text x="1262" y="1348" class="procedure">sp_actualizar_movimiento_demo</text>
+    <text x="1224" y="1382" class="route">POST /demos/movimientos/{movimiento_id}/actualizar</text>
+    <text x="1224" y="1414" class="copy">Edita el comando, orden y tiempos de un paso.</text>
+
+    <rect x="1200" y="1452" width="540" height="128" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="1231" cy="1482" r="19" fill="#7255a5"/><text x="1231" y="1489" text-anchor="middle" class="number">18</text>
+    <text x="1262" y="1488" class="procedure">sp_eliminar_movimiento_demo</text>
+    <text x="1224" y="1522" class="route">POST /demos/movimientos/{movimiento_id}/eliminar</text>
+    <text x="1224" y="1554" class="copy">Quita un paso de la secuencia configurada.</text>
+  </g>
+
+  <text x="60" y="1290" class="section">04 · Estado e historial</text>
+  <g>
+    <rect x="60" y="1314" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="91" cy="1346" r="19" fill="#d18425"/><text x="91" y="1353" text-anchor="middle" class="number">19</text>
+    <text x="122" y="1352" class="procedure">sp_obtener_estado</text>
+    <text x="84" y="1388" class="route">GET /vehiculos/{vehiculo_id}/estado</text>
+    <text x="84" y="1420" class="copy">Consulta el último comando registrado como estado actual.</text>
+
+    <rect x="60" y="1466" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="91" cy="1498" r="19" fill="#d18425"/><text x="91" y="1505" text-anchor="middle" class="number">20</text>
+    <text x="122" y="1504" class="procedure">sp_actualizar_estado</text>
+    <text x="84" y="1540" class="route">Uso interno · movimiento y ejecución DEMO</text>
+    <text x="84" y="1572" class="copy">Guarda el comando actual; en movimiento individual se combina</text>
+    <text x="84" y="1595" class="copy">con el registro del historial dentro de una transacción.</text>
+
+    <rect x="630" y="1314" width="540" height="140" rx="14" fill="#fff" stroke="#d4e2eb"/>
+    <circle cx="661" cy="1346" r="19" fill="#d18425"/><text x="661" y="1353" text-anchor="middle" class="number">21</text>
+    <text x="692" y="1352" class="procedure">sp_obtener_historial</text>
+    <text x="654" y="1388" class="route">GET /vehiculos/{vehiculo_id}/historial</text>
+    <text x="654" y="1420" class="copy">Devuelve hasta los 10 movimientos individuales recientes.</text>
+  </g>
+
+  <rect x="630" y="1474" width="1110" height="132" rx="16" fill="#e2f2f2" stroke="#b9dada" stroke-width="2"/>
+  <text x="660" y="1512" class="small-title">Ejecución física y eventos en tiempo real</text>
+  <text x="660" y="1548" class="small-copy">El movimiento individual valida vehículo/comando, confirma estado + historial en una transacción</text>
+  <text x="660" y="1578" class="small-copy">y publica el evento por WSS. Una DEMO reproduce sus pasos y emite avances; no agrega cada paso</text>
+  <text x="660" y="1608" class="small-copy">al historial individual. La ESP recibe la máscara de 16 bits configurada para sus salidas.</text>
+
+  <rect x="60" y="1640" width="1680" height="250" rx="18" fill="#fff" stroke="#d4e2eb" stroke-width="2"/>
+  <text x="90" y="1684" class="small-title">Dos procedimientos auxiliares completan el flujo (no se cuentan entre los 21 principales)</text>
+  <text x="100" y="1734" class="procedure">sp_actualizar_mascara_comando</text>
+  <text x="100" y="1766" class="small-copy">Persiste la máscara que representa las salidas del 74HC595; se usa al crear/editar comandos y al completar máscaras faltantes.</text>
+  <text x="100" y="1812" class="procedure">sp_registrar_historial</text>
+  <text x="100" y="1844" class="small-copy">Registra el movimiento individual junto con sp_actualizar_estado en una sola transacción confirmada por la API.</text>
+  <text x="90" y="1874" class="foot">Las rutas mostradas corresponden al contrato actual del código; las operaciones internas no tienen un endpoint independiente.</text>
+
+  <rect x="60" y="1920" width="1680" height="120" rx="18" fill="#12345a"/>
+  <text x="90" y="1965" class="subtitle">Acceso desplegado</text>
+  <text x="90" y="2008" class="subtitle">HTTPS: https://iotalis.duckdns.org   ·   Swagger: https://iotalis.duckdns.org/docs   ·   WSS vehículo 5: wss://iotalis.duckdns.org/ws/vehiculo/5</text>
+  <text x="60" y="2078" class="foot">La API utiliza llamadas parametrizadas a MySQL. La base de datos debe contener los procedimientos almacenados compatibles.</text>
+</svg>

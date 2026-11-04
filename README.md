@@ -1,306 +1,206 @@
-# 🚗 API Vehículo IoT 1.0.0 (OAS 3.1)
+# API de gestion de vehiculos IoT
 
-API RESTful y canal WebSocket desarrollados con **FastAPI**, **Python (Programación Orientada a Objetos)**, **Amazon RDS (MySQL con 21 Stored Procedures)** y **WebSockets** para la gestión, control y monitoreo en tiempo real de vehículos IoT.
+API REST con FastAPI para administrar vehiculos, comandos, movimientos y secuencias DEMO. La aplicacion usa una arquitectura orientada a objetos, MySQL mediante procedimientos almacenados y WebSockets para enviar eventos en tiempo real a los dispositivos conectados.
 
----
+## API desplegada
 
-## 📌 Servidor y Endpoints Base
+- **URL HTTPS de la API:** [https://iotalis.duckdns.org](https://iotalis.duckdns.org)
+- **Swagger UI / documentación interactiva:** [https://iotalis.duckdns.org/docs](https://iotalis.duckdns.org/docs)
+- **Dirección WSS del vehículo 5:** [`wss://iotalis.duckdns.org/ws/vehiculo/5`](wss://iotalis.duckdns.org/ws/vehiculo/5)
 
-Para interactuar con la API desplegada en la nube de **Amazon Web Services (AWS)** y realizar pruebas de todos los métodos y eventos en tiempo real, se deben utilizar los métodos principales asegurados con **SSL/TLS**:
+En Swagger puedes consultar los parámetros y esquemas de cada endpoint y ejecutar solicitudes de prueba. El WebSocket utiliza TLS y queda asociado al vehículo indicado en la ruta.
 
-* **Documentación Interactiva y Métodos HTTP (Swagger UI):**  
-  👉 **`https://44.196.75.158/docs`**
-* **Canal WebSocket en Vivo (WSS / Monitoreo en Tiempo Real):**  
-  👉 **`wss://44.196.75.158/ws/vehiculo/5`**
-* **Servidor en la Nube (AWS EC2 / IP Pública):**  
-  `https://44.196.75.158` (o `http://44.196.75.158`)
-* **Base de Datos en la Nube (Amazon RDS MySQL 8.0):**  
-  Conexión privada mediante Stored Procedures. Todas las credenciales sensibles permanecen ocultas en el archivo `.env`.
+## Contenido del repositorio
 
----
+- Codigo Python de la API y sus modulos.
+- `requirements.txt` con las dependencias.
+- Esta guia con instrucciones, endpoints, procedimientos almacenados y eventos WebSocket.
 
-## 🗺️ Arquitectura General y Funcionamiento de las 21 APIs
+No se incluyen archivos `.env`, contrasenas, certificados privados, copias de bases de datos ni firmware Arduino. Los procedimientos almacenados deben estar instalados previamente en la base de datos configurada.
 
-A continuación se presenta el diagrama de arquitectura y flujo técnico que modela la interacción del sistema, donde **FastAPI** actúa como orquestador, ejecutando los **21 Stored Procedures** en **Amazon RDS** para persistencia transaccional y transmitiendo eventos asíncronos en tiempo real vía **WebSockets**:
+## Requisitos
 
-![Documentación Técnica de las 21 APIs](./Manuscrito.jpeg)
+- Python 3.10 o posterior.
+- MySQL compatible con los procedimientos almacenados del proyecto.
+- Acceso de red desde la API a la base de datos.
 
-```
-┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                   DOCUMENTACIÓN TÉCNICA DE LAS 21 APIs (FastAPI + RDS + WebSockets)              │
-├─────────────────────┬─────────────────────┬──────────────────────────┬───────────────────────────┤
-│ 1. VEHÍCULOS Y      │ 2. COMANDOS Y DEMOS │ 3. ESTADO Y MONITOR      │ 4. PASOS DE DEMO Y        │
-│    OPERACIONES      │    (6-9, 14-16)     │    EN VIVO (WSS FLOW)    │    GENERAL (18-21, Root)  │
-│    (1-5, 10-13)     │                     │                          │                           │
-├─────────────────────┼─────────────────────┼──────────────────────────┼───────────────────────────┤
-│ • CRUD de Vehículos │ • Catálogo comandos │ • Handshake WSS          │ • Actualizar/Borrar pasos │
-│ • Estado actual     │ • CRUD de DEMOs     │ • Consulta SP estado ini │ • Crear/Actualizar DEMO   │
-│ • Historial (top 10)│ • Agregar paso DEMO │ • Broadcast en vivo      │ • Health Check / Root     │
-│ • Mov. Individual   │ • Regla orden único │ • Eventos a App y Carro  │ • Documentación Swagger   │
-└─────────────────────┴─────────────────────┴──────────────────────────┴───────────────────────────┘
-```
+## Instalacion y ejecucion local
 
-### Desglose por Módulos y Stored Procedures:
-
-#### 1. Vehículos y Operaciones (`/vehiculos`):
-* `GET /vehiculos/` — Listar todos los vehículos (`sp_obtener_vehiculos`).
-* `POST /vehiculos/` — Crear un vehículo (`sp_crear_vehiculo`).
-* `GET /vehiculos/{vehiculo_id}` — Consultar detalle de vehículo por ID (`sp_obtener_vehiculo`).
-* `GET /vehiculos/{vehiculo_id}/estado` — Consultar el último estado del vehículo (`sp_obtener_estado`).
-* `GET /vehiculos/{vehiculo_id}/historial` — Consultar los últimos 10 movimientos (`sp_obtener_historial`).
-* `GET /vehiculos/{vehiculo_id}/detalle-completo` — Obtener vehículo, estado, comandos y DEMOs en una sola consulta.
-* `POST /vehiculos/{vehiculo_id}/actualizar` — Actualizar vehículo (`sp_actualizar_vehiculo`).
-* `POST /vehiculos/{vehiculo_id}/eliminar` — Eliminar vehículo (`sp_eliminar_vehiculo`).
-* `POST /vehiculos/{vehiculo_id}/movimiento` — Ejecutar movimiento individual atómico (`sp_actualizar_estado` + `sp_registrar_historial`).
-* `POST /vehiculos/{vehiculo_id}/demo/iniciar` — Iniciar ejecución asíncrona de DEMO en segundo plano.
-* `POST /vehiculos/{vehiculo_id}/demo/detener` — Cancelar DEMO activa de manera inmediata.
-
-#### 2. Comandos (`/comandos`):
-* `GET /comandos/vehiculo/{vehiculo_id}` — Listar comandos de un vehículo (`sp_obtener_comandos_vehiculo`).
-* `POST /comandos/` — Crear comando (`sp_crear_comando`).
-* `POST /comandos/{comando_id}/actualizar` — Actualizar comando (`sp_actualizar_comando`).
-* `POST /comandos/{comando_id}/eliminar` — Eliminar comando (`sp_eliminar_comando`).
-
-#### 3. Demostraciones y Pasos (`/demos`):
-* `GET /demos/vehiculo/{vehiculo_id}` — Listar DEMOs de un vehículo (`sp_obtener_demos`).
-* `GET /demos/{demo_id}/movimientos` — Listar movimientos de una DEMO (`sp_obtener_movimientos_demo`).
-* `POST /demos/` — Crear DEMO (`sp_crear_demo`).
-* `POST /demos/{demo_id}/actualizar` — Actualizar DEMO (`sp_actualizar_demo`).
-* `POST /demos/{demo_id}/eliminar` — Eliminar DEMO (`sp_eliminar_demo`).
-* `POST /demos/{demo_id}/movimientos` — Agregar movimiento a una DEMO (`sp_agregar_movimiento_demo`). *Valida orden único para evitar HTTP 409 Conflict*.
-* `POST /demos/movimientos/{movimiento_id}/actualizar` — Actualizar movimiento de DEMO (`sp_actualizar_movimiento_demo`).
-* `POST /demos/movimientos/{movimiento_id}/eliminar` — Eliminar movimiento de DEMO (`sp_eliminar_movimiento_demo`).
-
-#### 4. General:
-* `GET /` — Root / Verificación de estado operativo del servicio.
-
----
-
-## ⚡ Conexión y Eventos WebSocket (Monitoreo en Tiempo Real)
-
-El canal WebSocket permite la comunicación bidireccional en tiempo real entre el servidor, los dashboards de monitoreo, la aplicación móvil y el hardware IoT (ESP32).
-
-### Método Principal de Conexión:
-
-Para conectarse y monitorear el vehículo `5` en la nube de AWS bajo conexión segura cifrada con SSL/TLS, se utiliza el método:
-
-👉 **`wss://44.196.75.158/ws/vehiculo/5`**
-
-*(En entorno de pruebas local se puede emplear `ws://localhost:8000/ws/vehiculo/5`).*
-
-### Validación de Conexión:
-Antes de aceptar la conexión, el servidor verifica la existencia del vehículo en **Amazon RDS**:
-1. Si el vehículo **no existe**, rechaza la conexión con el código de cierre **`1008` (Policy Violation)**.
-2. Si ocurre un error de base de datos interno, rechaza con el código **`1011` (Internal Server Error)**.
-3. Si el vehículo es válido, acepta el WebSocket y consulta inmediatamente `sp_obtener_estado` para enviar el evento `conexion_establecida` con el estado más reciente.
-
-### Tipos de Eventos Emitidos por el Servidor:
-
-* **`conexion_establecida`:** Enviado al conectar, contiene el estado inicial más reciente devuelto por Amazon RDS.
-* **`movimiento_individual`:** Emitido cuando se ejecuta un movimiento manual vía `POST /vehiculos/{id}/movimiento`.
-* **`demo_inicio`:** Notifica el comienzo de la rutina de prueba autónoma en segundo plano.
-* **`demo_movimiento`:** Emitido en cada paso de la DEMO (N movimientos secuenciales con orden, duración y pausa en ms).
-* **`demo_fin`:** Notifica la conclusión exitosa de todos los movimientos de la DEMO.
-* **`demo_cancelada`:** Emitido cuando la DEMO es interrumpida inmediatamente por el usuario mediante `POST /vehiculos/{id}/demo/detener`.
-* **`eco_cliente_ws`:** Respuesta de confirmación en formato JSON a mensajes enviados desde el cliente (ej. pruebas interactivas de Thunder Client).
-* **`demo_error`:** Notifica si ocurre una excepción inesperada durante la ejecución de la rutina.
-
----
-
-## 📊 Reglas de Negocio: Historial vs. DEMO
-
-| Tipo de Operación | ¿Afecta el Estado Actual? | ¿Genera Historial Permanente? | Razón Técnica |
-|---|:---:|:---:|---|
-| **Movimiento Individual (POST)** | **SÍ** | **SÍ** | Ejecuta `sp_actualizar_estado` + `sp_registrar_historial` en una sola transacción atómica en RDS (`BaseRepository._escribir`). Guarda la auditoría de cada orden manual. |
-| **Ejecución de DEMO (POST)** | **SÍ** | **NO** | Solo actualiza el estado en tiempo real (`sp_actualizar_estado`) y emite eventos WebSocket. Preserva la tabla de historial libre de ráfagas masivas de prueba repetitivas. |
-
-> **Nota sobre el Historial:** El endpoint `GET /vehiculos/{id}/historial` devuelve exclusivamente los **10 movimientos individuales más recientes** ordenados de más nuevo a más antiguo (`ORDER BY ... DESC`).
-
----
-
-## 🎯 Parámetros y Datos de Prueba del Entorno
-
-En la base de datos `vehiculo_iot` de Amazon RDS se encuentran configurados los siguientes datos listos para pruebas:
-
-* **ID de Vehículo Principal:** `5` (Excavadora 01)
-* **ID de DEMO Principal:** `2` (Secuencia de 8 movimientos)
-* **Rango de Comandos Disponibles:** IDs `14` al `22`
-
-| ID (`comando_id`) | Nombre de la Acción | Código de Hardware (`codigo`) | Función en el Vehículo |
-|:---:|:---:|:---:|---|
-| **14** | `AVANZAR` | `1` | Desplaza el vehículo hacia adelante |
-| **15** | `RETROCEDER` | `2` | Desplaza el vehículo hacia atrás |
-| **16** | `GIRAR_IZQUIERDA` | `3` | Rota sobre las orugas hacia la izquierda |
-| **17** | `GIRAR_DERECHA` | `4` | Rota sobre las orugas hacia la derecha |
-| **18** | `SUBIR_BRAZO` | `5` | Eleva el servo del brazo mecánico |
-| **19** | `BAJAR_BRAZO` | `6` | Desciende el servo del brazo mecánico |
-| **20** | `ABRIR_PALA` | `7` | Abre la pinza/pala del mecanismo |
-| **21** | `CERRAR_PALA` | `8` | Cierra la pinza/pala para sujeción |
-| **22** | `DETENER` | `9` | Frena todos los actuadores a neutro |
-
----
-
-## 🚀 Despliegue en AWS EC2 (Producción con SSL) y Entorno Local
-
-### 1. Despliegue en AWS EC2 (Servidor en la Nube con SSL / Puerto 443)
-
-En la instancia Windows Server de AWS EC2 (`44.196.75.158`):
+Desde la carpeta del proyecto, en PowerShell:
 
 ```powershell
-PS C:\Users\Administrator\Desktop\api_vehiculo_iot> .\.venv\Scripts\Activate.ps1
-(.venv) PS C:\Users\Administrator\Desktop\api_vehiculo_iot> uvicorn main:app --host 0.0.0.0 --port 443 --ssl-keyfile="C:\Users\Administrator\Desktop\api_vehiculo_iot\cert\key.pem" --ssl-certfile="C:\Users\Administrator\Desktop\api_vehiculo_iot\cert\cert.pem" --reload
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-> **Certificados SSL:** Con los certificados cargados en `--ssl-keyfile` y `--ssl-certfile`, la API escucha sobre **HTTPS** y **WSS** directamente en el puerto seguro `443`.
+Configura estas variables en el entorno del proceso que ejecutara la API. Para desarrollo local tambien puedes guardarlas en un `.env` local; Git ignora ese archivo y no debe subirse al repositorio.
 
-### 2. Despliegue en Entorno Local de Desarrollo (Localhost / Puerto 8000)
+| Variable | Descripcion |
+|---|---|
+| `DB_HOST` | Host de MySQL |
+| `DB_PORT` | Puerto MySQL (opcional; predeterminado `3306`) |
+| `DB_NAME` | Nombre de la base de datos |
+| `DB_USER` | Usuario de la base de datos |
+| `DB_PASSWORD` | Contrasena de la base de datos |
 
-1. **Crear y activar el entorno virtual:**
-   ```powershell
-   python -m venv .venv
-   .venv\Scripts\activate
-   ```
+Ejemplo para establecer valores solo en la sesion actual de PowerShell (sustituye los marcadores localmente; no guardes valores reales en el codigo ni en Git):
 
-2. **Instalar dependencias:**
-   ```powershell
-   pip install -r requirements.txt
-   ```
-
-3. **Configurar variables de entorno (`.env`):**
-   Copia la plantilla `.env.example` y define tus credenciales reales:
-   ```env
-   DB_HOST=tu_instancia_rds.amazonaws.com
-   DB_PORT=3306
-   DB_NAME=vehiculo_iot
-   DB_USER=tu_usuario_rds
-   DB_PASSWORD="tu_password_seguro"
-   CORS_ORIGINS=*
-   ```
-
-4. **Verificar conexión con Amazon RDS:**
-   ```powershell
-   python probar_conexion.py
-   ```
-   *Debe responder:* `Conexión exitosa con RDS`
-
-5. **Iniciar el servidor local:**
-   ```powershell
-   uvicorn main:app --reload --port 8000
-   ```
-
----
-
-## 🧪 Pruebas con Thunder Client / cURL / Swagger
-
-Para interactuar con el entorno en la nube, el método principal es a través de la interfaz segura Swagger UI:  
-👉 **`https://44.196.75.158/docs`**
-
-### 1. Consultas GET
-
-```http
-### Listar vehículos
-GET https://44.196.75.158/vehiculos/
-
-### Consultar estado del vehículo 5
-GET https://44.196.75.158/vehiculos/5/estado
-
-### Consultar historial (top 10 movimientos)
-GET https://44.196.75.158/vehiculos/5/historial
-
-### Detalle completo del vehículo 5
-GET https://44.196.75.158/vehiculos/5/detalle-completo
-
-### Listar comandos habilitados del vehículo 5
-GET https://44.196.75.158/comandos/vehiculo/5
-
-### Listar movimientos de la DEMO 2
-GET https://44.196.75.158/demos/2/movimientos
+```powershell
+$env:DB_HOST = "<host-mysql>"
+$env:DB_PORT = "3306"
+$env:DB_NAME = "<base-de-datos>"
+$env:DB_USER = "<usuario>"
+$env:DB_PASSWORD = "<contrasena>"
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### 2. Operaciones POST
+La documentacion interactiva queda disponible en `http://127.0.0.1:8000/docs`. Para pruebas desde otro dispositivo de la misma LAN, configura el host de Uvicorn y el firewall de acuerdo con tu entorno; no expongas el servidor de desarrollo directamente a Internet.
 
-#### Movimiento Individual (Avanzar)
-```http
-POST https://44.196.75.158/vehiculos/5/movimiento
-Content-Type: application/json
+En produccion, utiliza un servicio de procesos y un proxy HTTPS/WSS configurados para la red correspondiente. El endpoint seguro de WebSocket es `wss://<dominio>/ws/vehiculo/{vehiculo_id}`.
 
-{
-  "comando_id": 14,
-  "origen": "THUNDER_CLIENT"
-}
-```
-
-#### Iniciar DEMO 2
-```http
-POST https://44.196.75.158/vehiculos/5/demo/iniciar
-Content-Type: application/json
-
-{
-  "demo_id": 2
-}
-```
-
-#### Detener DEMO Activa
-```http
-POST https://44.196.75.158/vehiculos/5/demo/detener
-```
-
----
-
-## 🛡️ Gestión de Errores y Códigos HTTP
-
-| Código | Significado | Causa Habitual |
-|:---:|---|---|
-| **200 / 201** | Operación Exitosa | Solicitud procesada correctamente o recurso creado. |
-| **400** | Bad Request | Datos inválidos, comando no autorizado o excepción `SIGNAL SQLSTATE '45000'` lanzada por un Stored Procedure de MySQL. |
-| **404** | Not Found | Vehículo, comando o DEMO inexistente en Amazon RDS. |
-| **409** | Conflict | Ya existe una DEMO en ejecución para ese vehículo, o conflicto de clave única (ej. orden repetido en un paso de DEMO). |
-| **422** | Unprocessable Entity | Error en la estructura JSON del cuerpo de la petición (validado por Pydantic). |
-| **500** | Internal Server Error | Error no controlado o interrupción en la conexión hacia Amazon RDS. |
-
----
-
-## 📂 Estructura del Proyecto
+## Arquitectura
 
 ```text
-api_vehiculo_iot/
-│
-├── config/
-│   ├── __init__.py
-│   └── database.py                 # Conexión a Amazon RDS MySQL con PyMySQL
-│
-├── repositories/                   # Ejecución de los 21 Stored Procedures
-│   ├── __init__.py
-│   ├── base_repository.py          # Clase base con contexto transaccional
-│   ├── vehiculo_repository.py      # Stored procedures de vehículos
-│   ├── comando_repository.py       # Stored procedures de comandos
-│   ├── demo_repository.py          # Stored procedures de DEMOs y sus pasos
-│   └── estado_historial_repository.py # Stored procedures de estado e historial
-│
-├── services/                       # Lógica de negocio y concurrencia
-│   ├── __init__.py
-│   └── operacion_service.py        # Orquestación de movimientos y DEMOs asíncronas
-│
-├── routers/                        # Endpoints REST y WebSocket
-│   ├── __init__.py
-│   ├── vehiculo_router.py          # Rutas /vehiculos
-│   ├── comando_router.py           # Rutas /comandos
-│   ├── demo_router.py              # Rutas /demos
-│   └── ws_router.py                # Ruta /ws/vehiculo/{id} y validación 1008
-│
-├── schemas/                        # Validación de entradas con Pydantic
-│   ├── __init__.py
-│   ├── gestion_schema.py           # Modelos de datos para CRUD
-│   └── movimiento_schema.py        # Modelos de datos para movimiento y DEMO
-│
-├── ws_manager/                     # Gestión de WebSockets
-│   ├── __init__.py
-│   ├── eventos.py                  # Definición de tipos de eventos estándar
-│   └── manager.py                  # ConnectionManager (pools de clientes por vehículo)
-│
-├── .env                            # Variables de entorno privadas (ignorado en Git)
-├── .gitignore                      # Exclusiones de Git (.env, .venv, etc.)
-├── main.py                         # Entrada FastAPI, middlewares CORS y handlers de error
-├── probar_conexion.py              # Script de prueba de conectividad con Amazon RDS
-└── requirements.txt                # Dependencias del proyecto
+main.py
+  -> core/             Contenedor de dependencias y reglas compartidas
+  -> routers/          Controladores HTTP y WebSocket
+  -> schemas/          Validacion de solicitudes con Pydantic
+  -> services/         Operaciones, movimientos, DEMOs y eliminaciones
+  -> repositories/     Acceso a datos mediante procedimientos MySQL
+  -> models/           Entidades de dominio
+  -> ws_manager/       Clientes conectados, eventos y difusion
+  -> config/           Conexion y configuracion de base de datos
+```
+
+Los controladores y repositorios se construyen con dependencias inyectadas por `core/contenedor.py`. `BaseController` registra rutas comunes y `BaseRepository` centraliza consultas, escritura, transacciones y conversion de resultados a entidades.
+
+## Endpoints HTTP
+
+Todas las rutas se documentan en `/docs`. Las operaciones de modificacion y eliminacion usan `POST`, segun el contrato actual de la API.
+
+### General
+
+| Metodo | Ruta | Funcion |
+|---|---|---|
+| GET | `/` | Informacion basica del servicio, documentacion y ruta WebSocket |
+
+### Vehiculos y operaciones
+
+| Metodo | Ruta | Funcion |
+|---|---|---|
+| GET | `/vehiculos/` | Listar vehiculos |
+| GET | `/vehiculos/{vehiculo_id}` | Obtener un vehiculo |
+| GET | `/vehiculos/{vehiculo_id}/estado` | Consultar el estado mas reciente |
+| GET | `/vehiculos/{vehiculo_id}/historial` | Consultar los 10 movimientos recientes |
+| GET | `/vehiculos/{vehiculo_id}/detalle-completo` | Obtener vehiculo, comandos, estado y DEMOs |
+| POST | `/vehiculos/` | Crear vehiculo |
+| POST | `/vehiculos/{vehiculo_id}/actualizar` | Actualizar vehiculo |
+| POST | `/vehiculos/{vehiculo_id}/eliminar` | Eliminar vehiculo (409 si tiene una DEMO activa) |
+| POST | `/vehiculos/{vehiculo_id}/movimiento` | Ejecutar un movimiento individual |
+| POST | `/vehiculos/{vehiculo_id}/mensaje` | Enviar texto al dispositivo conectado |
+| POST | `/vehiculos/{vehiculo_id}/demo/iniciar` | Iniciar una DEMO |
+| POST | `/vehiculos/{vehiculo_id}/demo/detener` | Cancelar la DEMO activa |
+
+Ejemplo de cuerpo para ejecutar un comando:
+
+```json
+{
+  "comando_id": 1,
+  "origen": "WEB_API"
+}
+```
+
+### Comandos
+
+| Metodo | Ruta | Funcion |
+|---|---|---|
+| GET | `/comandos/vehiculo/{vehiculo_id}` | Listar comandos de un vehiculo |
+| GET | `/comandos/vehiculo/{vehiculo_id}/detalle` | Listar comandos y sus mascaras de salida |
+| POST | `/comandos/` | Crear comando |
+| POST | `/comandos/{comando_id}/actualizar` | Actualizar comando |
+| POST | `/comandos/{comando_id}/eliminar` | Eliminar comando |
+| POST | `/comandos/{comando_id}/mascara` | Asignar mascara de salida |
+
+Las mascaras deben corresponder al cableado de los registros 74HC595. Se pueden enviar explicitamente; el backend tambien tiene un mapa automatico por nombre y usa mascara `0` para nombres que no reconoce.
+
+### DEMOs
+
+| Metodo | Ruta | Funcion |
+|---|---|---|
+| GET | `/demos/vehiculo/{vehiculo_id}` | Listar DEMOs de un vehiculo |
+| GET | `/demos/{demo_id}/movimientos` | Listar los pasos de una DEMO |
+| POST | `/demos/` | Crear DEMO |
+| POST | `/demos/{demo_id}/actualizar` | Actualizar DEMO |
+| POST | `/demos/{demo_id}/eliminar` | Eliminar DEMO |
+| POST | `/demos/{demo_id}/movimientos` | Agregar paso a una DEMO |
+| POST | `/demos/movimientos/{movimiento_id}/actualizar` | Actualizar paso |
+| POST | `/demos/movimientos/{movimiento_id}/eliminar` | Eliminar paso |
+
+## Procedimientos almacenados
+
+El siguiente manuscrito visual resume las **21 operaciones principales** implementadas con procedimientos almacenados, las rutas HTTP que las utilizan y el flujo desde la solicitud hasta MySQL y el dispositivo. No representa 21 rutas HTTP: algunas rutas coordinan varias operaciones y `sp_actualizar_estado` se ejecuta internamente. Además, el código utiliza dos procedimientos auxiliares —para persistir máscaras y registrar historial—, por lo que invoca 23 nombres únicos en total. Los procedimientos no se crean automáticamente por esta API y deben existir en el esquema de base de datos.
+
+![Manuscrito visual del funcionamiento de las 21 operaciones principales de la API Vehículo IoT](docs/manuscrito_21_operaciones.svg)
+
+| Area | Procedimientos |
+|---|---|
+| Vehiculos | `sp_obtener_vehiculos`, `sp_obtener_vehiculo`, `sp_crear_vehiculo`, `sp_actualizar_vehiculo`, `sp_eliminar_vehiculo` |
+| Comandos | `sp_obtener_comandos_vehiculo`, `sp_obtener_comandos_detalle`, `sp_crear_comando`, `sp_actualizar_comando`, `sp_eliminar_comando`, `sp_actualizar_mascara_comando` |
+| DEMOs y pasos | `sp_obtener_demos`, `sp_obtener_movimientos_demo`, `sp_crear_demo`, `sp_actualizar_demo`, `sp_eliminar_demo`, `sp_agregar_movimiento_demo`, `sp_actualizar_movimiento_demo`, `sp_eliminar_movimiento_demo` |
+| Estado e historial | `sp_obtener_estado`, `sp_actualizar_estado`, `sp_registrar_historial`, `sp_obtener_historial` |
+
+El movimiento individual actualiza estado e historial dentro de una transaccion. Las DEMOs actualizan estado y emiten eventos por cada paso; su secuencia no se registra como historial individual.
+
+## WebSocket
+
+### Endpoint
+
+```text
+ws://<host>:<puerto>/ws/vehiculo/{vehiculo_id}
+wss://<dominio>/ws/vehiculo/{vehiculo_id}
+```
+
+Usa `wss://` cuando el trafico pasa por HTTPS en produccion. La API valida que el vehiculo exista antes de aceptar la conexion; un ID inexistente se rechaza. Los eventos se envian solo a clientes suscritos al mismo `vehiculo_id`.
+
+### Eventos emitidos por el servidor
+
+Todos los eventos incluyen `tipo`, `vehiculo_id`, `comando_id`, `codigo` y `marca_temporal`; los campos no aplicables pueden ser `null`.
+
+| `tipo` | Datos adicionales | Uso |
+|---|---|---|
+| `conexion_establecida` | `estado_inicial` | Confirmacion y estado inicial al conectar |
+| `movimiento_individual` | `origen`, `nombre`, `mascara` | Movimiento individual para la ESP |
+| `consulta` | `recurso`, `datos` | Notificacion de consulta de comandos o DEMOs |
+| `mensaje` | `texto` | Texto de prueba para el dispositivo |
+| `eco_cliente_ws` | `mensaje_recibido`, `estado` | Eco de un texto enviado por el cliente WebSocket |
+| `demo_inicio` | `demo_id`, `total_movimientos` | Inicio de secuencia |
+| `demo_movimiento` | `demo_id`, `orden`, `duracion_ms`, `pausa_ms`, `nombre`, `mascara` | Paso de movimiento de DEMO |
+| `demo_fin` | `demo_id` | Secuencia finalizada |
+| `demo_cancelada` | `demo_id`, `mensaje` | Secuencia cancelada |
+| `demo_error` | `demo_id`, `error` | Error durante la secuencia |
+
+Los eventos `movimiento_individual` y `demo_movimiento` incluyen la mascara de 16 bits que el firmware puede convertir a salidas. El dispositivo debe validar el vehiculo y el rango de la mascara antes de accionar hardware.
+
+### Flujo
+
+1. El cliente abre `/ws/vehiculo/{vehiculo_id}`.
+2. FastAPI valida el vehiculo y acepta la conexion.
+3. El servidor envia `conexion_establecida`.
+4. Los endpoints de movimiento, mensaje, consulta y DEMO emiten los eventos correspondientes a los clientes conectados a ese vehiculo.
+5. Si un cliente WebSocket envia texto, el servidor responde con `eco_cliente_ws`.
+
+## Seguridad y publicacion en GitHub
+
+- No subas `.env`, contrasenas, tokens, claves privadas, certificados con clave privada ni datos de conexion.
+- El `.gitignore` excluye archivos de entorno y material local de firmware/Wi-Fi de este repositorio API.
+- La configuracion real de base de datos debe proporcionarse mediante el entorno del servicio.
+- Si una credencial se publico alguna vez, eliminar el archivo del ultimo commit no basta: rota la credencial y limpia el historial Git antes de hacer publico el repositorio.
+
+Antes de publicar, revisa:
+
+```powershell
+git status --short
+git ls-files
+git diff --check
 ```

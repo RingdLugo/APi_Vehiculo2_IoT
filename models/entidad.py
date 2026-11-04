@@ -5,7 +5,8 @@ from typing import Any
 class Entidad(ABC):
 
     def __init__(self, datos: dict):
-        self.__datos = dict(datos or {})        
+        self.__datos = dict(datos or {})
+
 
     @property
     @abstractmethod
@@ -15,6 +16,7 @@ class Entidad(ABC):
     @abstractmethod
     def describir(self) -> str:
         """Texto legible de la entidad (POLIMORFISMO: cada clase lo redefine)."""
+
 
     def obtener(self, clave: str, defecto: Any = None) -> Any:
         """Lectura controlada de un dato interno."""

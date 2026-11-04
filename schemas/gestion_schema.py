@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -15,6 +17,10 @@ class ComandoCrear(BaseModel):
     nombre: str = Field(..., min_length=1, example="Avanzar")
     codigo: int = Field(..., description="Código numérico del comando (único por vehículo).", example=1)
     descripcion: str = Field("", example="Mueve el vehículo hacia adelante")
+    mascara: Optional[int] = Field(
+        None, ge=0, le=65535, example=1024,
+        description="Salidas de los 74HC595 que activa el comando (0-65535). "
+                    "Sin máscara, el comando no podrá ejecutarse en el vehículo.")
 
 
 class ComandoActualizar(BaseModel):
@@ -22,6 +28,9 @@ class ComandoActualizar(BaseModel):
     codigo: int = Field(..., description="Código numérico del comando (único por vehículo).")
     descripcion: str = ""
     activo: bool = True
+    mascara: Optional[int] = Field(
+        None, ge=0, le=65535,
+        description="Opcional. Si se envía, actualiza la máscara de salida del comando.")
 
 
 class DemoCrear(BaseModel):
@@ -45,3 +54,9 @@ class MovimientoDemoCrear(BaseModel):
 
 class MovimientoDemoActualizar(MovimientoDemoCrear):
     pass
+
+
+class MascaraRequest(BaseModel):
+    mascara: int = Field(..., ge=0, le=65535, example=1024,
+                         description="Valor de 16 bits para los 74HC595 (0 = apagar todo). "
+                                     "Ej.: 0x0400 = 1024.")

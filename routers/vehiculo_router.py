@@ -1,5 +1,6 @@
 import logging
 
+import pymysql
 from fastapi import HTTPException, status
 
 from repositories.comando_repository import ComandoRepository
@@ -8,23 +9,24 @@ from repositories.estado_historial_repository import EstadoHistorialRepository
 from repositories.vehiculo_repository import VehiculoRepository
 from routers.base_controller import BaseController
 from schemas.gestion_schema import VehiculoActualizar, VehiculoCrear
-from schemas.movimiento_schema import DemoRequest, MovimientoIndividualRequest
+from schemas.movimiento_schema import DemoRequest, MensajeRequest, MovimientoIndividualRequest
+from services.eliminacion_service import EliminacionService
 from services.operacion_service import DemoActivaError, OperacionService
 
 logger = logging.getLogger(__name__)
 
 
 class VehiculoController(BaseController):
-    """Endpoints de vehículos, movimientos individuales y control de DEMO."""
 
     def __init__(self, vehiculo_repo: VehiculoRepository, comando_repo: ComandoRepository,
                  estado_repo: EstadoHistorialRepository, demo_repo: DemoRepository,
-                 operacion_service: OperacionService):
+                 operacion_service: OperacionService, eliminacion_service: EliminacionService):
         self._vehiculo_repo = vehiculo_repo
         self._comando_repo = comando_repo
         self._estado_repo = estado_repo
         self._demo_repo = demo_repo
         self._operacion = operacion_service
+        self._eliminacion = eliminacion_service
         super().__init__(prefix="/vehiculos", tags=["Vehículos y Operaciones"])
 
     def _vehiculo_o_404(self, vehiculo_id: int) -> dict:
@@ -61,6 +63,10 @@ class VehiculoController(BaseController):
           status_code=status.HTTP_201_CREATED,
           responses={400: {"description": "Datos inválidos o comando no autorizado."},
                      500: {"description": "Error interno en la base de datos."}})
+        r("/{vehiculo_id}/mensaje", self.enviar_mensaje, "POST", "Enviar mensaje de prueba al dispositivo",
+          "Envía un texto por el WebSocket del vehículo; aparece en el Monitor Serie del Arduino. "
+          "No mueve el vehículo ni escribe en la base de datos.",
+          responses={400: {"description": "Vehículo inexistente o inactivo."}})
         r("/{vehiculo_id}/demo/iniciar", self.iniciar_demo, "POST", "Iniciar ejecución de DEMO",
           "Lanza la secuencia en segundo plano; el avance se emite por WebSocket.",
           status_code=status.HTTP_200_OK,
@@ -70,7 +76,7 @@ class VehiculoController(BaseController):
           "Cancela de inmediato la DEMO activa del vehículo.",
           responses={400: {"description": "No hay ninguna DEMO activa."}})
 
-    # ---------- consultas ----------
+
     def obtener_vehiculos(self):
         return self._serializar(self._vehiculo_repo.obtener_todos())
 
@@ -96,7 +102,7 @@ class VehiculoController(BaseController):
             "demos_asociadas": self._serializar(self._demo_repo.obtener_demos_vehiculo(vehiculo_id)),
         }
 
-    # ---------- gestión ----------
+
     def crear_vehiculo(self, data: VehiculoCrear):
         return self._vehiculo_repo.crear(data.nombre, data.descripcion)
 
@@ -108,9 +114,9 @@ class VehiculoController(BaseController):
         self._vehiculo_o_404(vehiculo_id)
         if self._operacion.tiene_demo_activa(vehiculo_id):
             raise HTTPException(status_code=409, detail="El vehículo tiene una DEMO en ejecución.")
-        return self._vehiculo_repo.eliminar(vehiculo_id)
+        return self._eliminacion.eliminar(self._vehiculo_repo, vehiculo_id)
 
-    # ---------- operaciones ----------
+
     async def registrar_movimiento_individual(self, vehiculo_id: int, data: MovimientoIndividualRequest):
         try:
             return await self._operacion.ejecutar_movimiento_individual(
@@ -118,9 +124,20 @@ class VehiculoController(BaseController):
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        except pymysql.MySQLError:
+            raise
         except Exception:
             logger.exception("Error en movimiento individual")
             raise HTTPException(status_code=500, detail="Error interno al procesar el movimiento.")
+
+    async def enviar_mensaje(self, vehiculo_id: int, data: MensajeRequest):
+        try:
+            return await self._operacion.enviar_mensaje(vehiculo_id, data.texto)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception:
+            logger.exception("Error al enviar el mensaje")
+            raise HTTPException(status_code=500, detail="Error interno al enviar el mensaje.")
 
     async def iniciar_demo(self, vehiculo_id: int, data: DemoRequest):
         try:
@@ -129,6 +146,8 @@ class VehiculoController(BaseController):
             raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        except pymysql.MySQLError:
+            raise
         except Exception:
             logger.exception("Error al iniciar la DEMO")
             raise HTTPException(status_code=500, detail="Error interno al iniciar la DEMO.")

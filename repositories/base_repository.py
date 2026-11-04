@@ -9,14 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class BaseRepository(ABC):
-    """Clase abstracta base de todos los repositorios.
-
-    - ABSTRACCIÓN: oculta la conexión y los CALL a Stored Procedures.
-    - ENCAPSULAMIENTO: la conexión es privada; solo las subclases usan los
-      métodos protegidos `_consultar`, `_escribir`, `_listar`, `_obtener`.
-    - POLIMORFISMO: `construir` es abstracto; cada repositorio devuelve su propio
-      tipo de entidad y el resto del código lo trata como `Entidad`.
-    """
 
     def __init__(self, db: DatabaseConnection):
         self.__db = db
