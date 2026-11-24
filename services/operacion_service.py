@@ -1,0 +1,279 @@
+import asyncio
+import logging
+import time
+from collections import defaultdict, deque
+from typing import Optional
+
+import pymysql
+
+from models.entidades import Comando, MovimientoDemo
+from repositories.comando_repository import ComandoRepository
+from repositories.demo_repository import DemoRepository
+from repositories.estado_historial_repository import EstadoHistorialRepository
+from repositories.vehiculo_repository import VehiculoRepository
+from ws_manager.eventos import (
+    Evento, EventoDemoCancelada, EventoDemoError, EventoDemoFin, EventoDemoInicio,
+    EventoDemoMovimiento, EventoMensaje, EventoMovimientoIndividual,
+)
+from ws_manager.manager import ConnectionManager
+
+logger = logging.getLogger(__name__)
+
+
+class DemoActivaError(ValueError):
+    """Ya existe una DEMO en ejecución para el vehículo (HTTP 409)."""
+
+
+class MovimientoLimitadoError(Exception):
+    """Se excedió el límite de frecuencia de movimientos por unidad."""
+
+
+class SesionDemo:
+    """Objeto que representa UNA ejecución de DEMO (estado propio + métodos de instancia).
+
+    NO escribe en el historial; solo actualiza el estado y emite eventos.
+    """
+
+    def __init__(self, vehiculo_id: int, demo_id: int, movimientos: list[MovimientoDemo],
+                 comandos: dict[int, Comando], estado_repo: EstadoHistorialRepository,
+                 manager: ConnectionManager):
+        self.__vehiculo_id = vehiculo_id
+        self.__demo_id = demo_id
+        self.__movimientos = movimientos
+        self.__comandos = comandos
+        self.__estado_repo = estado_repo
+        self.__manager = manager
+        self.__cancelar = asyncio.Event()
+
+    @property
+    def vehiculo_id(self) -> int:
+        return self.__vehiculo_id
+
+    @property
+    def total_movimientos(self) -> int:
+        return len(self.__movimientos)
+
+    def cancelar(self) -> None:
+        self.__cancelar.set()
+
+    async def __emitir(self, evento: Evento) -> None:
+        await self.__manager.broadcast_to_vehicle(evento)
+
+    async def ejecutar(self) -> None:
+        v, d = self.__vehiculo_id, self.__demo_id
+        try:
+            await self.__emitir(EventoDemoInicio(v, d, self.total_movimientos))
+
+            for mov in self.__movimientos:
+                if self.__cancelar.is_set():
+                    await self.__emitir(EventoDemoCancelada(v, d))
+                    return
+
+                await asyncio.to_thread(self.__estado_repo.actualizar_estado, v, mov.comando_id, "DEMO")
+                if self.__cancelar.is_set():
+                    await self.__emitir(EventoDemoCancelada(v, d))
+                    return
+                comando = self.__comandos[mov.comando_id]
+                await self.__emitir(EventoDemoMovimiento(
+                    v, d, mov.comando_id, comando.codigo, mov.orden,
+                    mov.duracion_ms, mov.pausa_ms, comando.nombre, comando.mascara))
+
+                try:
+                    await asyncio.wait_for(self.__cancelar.wait(), timeout=mov.espera_total_segundos())
+                    await self.__emitir(EventoDemoCancelada(v, d))
+                    return
+                except asyncio.TimeoutError:
+                    pass
+
+            await self.__emitir(EventoDemoFin(v, d))
+
+        except Exception:
+            logger.exception("Error durante la ejecución de la DEMO %s", d)
+            await self.__emitir(EventoDemoError(v, d))
+
+
+class OperacionService:
+    """Reglas de negocio: movimientos individuales, DEMO y control de concurrencia."""
+
+    def __init__(self, vehiculo_repo: VehiculoRepository, comando_repo: ComandoRepository,
+                 demo_repo: DemoRepository, estado_repo: EstadoHistorialRepository,
+                 manager: ConnectionManager):
+        self.__vehiculo_repo = vehiculo_repo
+        self.__comando_repo = comando_repo
+        self.__demo_repo = demo_repo
+        self.__estado_repo = estado_repo
+        self.__manager = manager
+        self.__sesiones: dict[int, SesionDemo] = {}
+        self.__reservas: set[int] = set()
+        self.__tareas: set[asyncio.Task] = set()
+        self.__movimientos_recientes: dict[int, deque[float]] = defaultdict(deque)
+
+    async def _validar_vehiculo(self, vehiculo_id: int):
+        vehiculo = await asyncio.to_thread(self.__vehiculo_repo.obtener_por_id, vehiculo_id)
+        if not vehiculo:
+            raise ValueError("El vehículo especificado no existe.")
+        if not vehiculo.esta_activo():
+            raise ValueError("El vehículo se encuentra inactivo.")
+        return vehiculo
+
+    @staticmethod
+    def _buscar_comando(comandos: list[Comando], comando_id: int) -> Optional[Comando]:
+        return next((c for c in comandos if c.id == comando_id and c.esta_activo()), None)
+
+    @staticmethod
+    def _exigir_mascara(comando: Comando) -> None:
+        """Sin máscara la ESP no sabría qué salidas activar: se rechaza antes de tocar la BD."""
+        if not comando.tiene_mascara():
+            raise ValueError(
+                f"El comando '{comando.nombre}' (id {comando.id}) no tiene máscara de salida configurada. "
+                f"Asígnala con POST /comandos/{comando.id}/mascara."
+            )
+
+    def tiene_demo_activa(self, vehiculo_id: int) -> bool:
+        return vehiculo_id in self.__sesiones or vehiculo_id in self.__reservas
+
+    async def ejecutar_movimiento_individual(
+        self, vehiculo_id: int, comando_id: int, origen: str, estado_salida: Optional[bool] = None
+    ):
+        await self._validar_vehiculo(vehiculo_id)
+
+        comandos = await asyncio.to_thread(self.__comando_repo.obtener_detalle_por_vehiculo, vehiculo_id)
+        comando = self._buscar_comando(comandos, comando_id)
+        if not comando:
+            raise ValueError("El comando no existe, está inactivo o no pertenece a este vehículo.")
+        self._exigir_mascara(comando)
+
+        nombre_normalizado = comando.nombre.upper()
+        salida_conmutable = {
+            "ENCENDER_LED": 0x0400,
+            "ACTIVAR_SONIDO": 0x0100,
+        }.get(nombre_normalizado)
+        if estado_salida is not None:
+            if salida_conmutable is None or comando.mascara != salida_conmutable:
+                raise ValueError("El estado conmutable solo se admite para LED o sonido con su máscara configurada.")
+
+        es_detener = nombre_normalizado == "DETENER" or origen.upper().startswith("SEGURIDAD_")
+        if es_detener:
+            sesion_activa = self.__sesiones.get(vehiculo_id)
+            if sesion_activa is not None:
+                sesion_activa.cancelar()
+        else:
+            ahora = time.monotonic()
+            recientes = self.__movimientos_recientes[vehiculo_id]
+            while recientes and ahora - recientes[0] >= 10:
+                recientes.popleft()
+            if len(recientes) >= 50:
+                raise MovimientoLimitadoError("Límite alcanzado: espera antes de enviar más movimientos.")
+            recientes.append(ahora)
+
+        try:
+            await asyncio.to_thread(
+                self.__estado_repo.registrar_movimiento_atomico, vehiculo_id, comando_id, origen
+            )
+        except pymysql.MySQLError:
+            raise
+        except Exception as e:
+            logger.exception("Fallo al registrar el movimiento individual")
+            raise RuntimeError("Error de base de datos al registrar el movimiento.") from e
+
+        await self.__manager.broadcast_to_vehicle(
+            EventoMovimientoIndividual(vehiculo_id, comando_id, comando.codigo, origen,
+                                       comando.nombre, comando.mascara, estado_salida)
+        )
+        return {"mensaje": "Movimiento individual procesado y registrado en historial exitosamente."}
+
+    async def enviar_mensaje(self, vehiculo_id: int, texto: str):
+        """Envía un texto por el WebSocket del vehículo (no mueve nada ni escribe en la BD)."""
+        await self._validar_vehiculo(vehiculo_id)
+        await self.__manager.broadcast_to_vehicle(EventoMensaje(vehiculo_id, texto))
+
+        clientes = self.__manager.total_conexiones(vehiculo_id)
+        respuesta = {
+            "mensaje": "Mensaje enviado por WebSocket.",
+            "vehiculo_id": vehiculo_id,
+            "texto": texto,
+            "clientes_conectados": clientes,
+        }
+        if clientes == 0:
+            respuesta["aviso"] = "No hay ningún dispositivo conectado al WebSocket de este vehículo."
+        return respuesta
+
+    async def iniciar_demo(self, vehiculo_id: int, demo_id: int):
+        if self.tiene_demo_activa(vehiculo_id):
+            raise DemoActivaError(
+                "Ya existe una DEMO en ejecución para este vehículo. Debe finalizar o cancelarse primero."
+            )
+
+        self.__reservas.add(vehiculo_id)
+        try:
+            await self._validar_vehiculo(vehiculo_id)
+
+            demos = await asyncio.to_thread(self.__demo_repo.obtener_demos_vehiculo, vehiculo_id)
+            demo = next((d for d in demos if d.id == demo_id), None)
+            if not demo or not demo.esta_activo():
+                raise ValueError("La DEMO no existe, está inactiva o no pertenece a este vehículo.")
+
+            movimientos = await asyncio.to_thread(self.__demo_repo.obtener_movimientos_demo, demo_id)
+            if not movimientos:
+                raise ValueError("La DEMO no contiene movimientos registrados.")
+            movimientos = sorted(movimientos, key=lambda m: m.orden)
+
+            lista = await asyncio.to_thread(self.__comando_repo.obtener_detalle_por_vehiculo, vehiculo_id)
+            comandos = {c.id: c for c in lista}
+            for mov in movimientos:
+                comando = comandos.get(mov.comando_id)
+                if comando is None:
+                    raise ValueError(f"El paso {mov.orden} usa un comando que no pertenece a este vehículo.")
+                self._exigir_mascara(comando)
+        except Exception:
+            self.__reservas.discard(vehiculo_id)
+            raise
+
+        sesion = SesionDemo(vehiculo_id, demo_id, movimientos, comandos, self.__estado_repo, self.__manager)
+        self.__sesiones[vehiculo_id] = sesion
+        self.__reservas.discard(vehiculo_id)
+        tarea = asyncio.create_task(self.__correr(sesion))
+        self.__tareas.add(tarea)
+        tarea.add_done_callback(self.__tareas.discard)
+
+        return {
+            "mensaje": "DEMO iniciada. Siga el avance por WebSocket.",
+            "vehiculo_id": vehiculo_id,
+            "demo_id": demo_id,
+            "total_movimientos": sesion.total_movimientos,
+        }
+
+    async def __correr(self, sesion: SesionDemo) -> None:
+        try:
+            await sesion.ejecutar()
+        finally:
+            self.__sesiones.pop(sesion.vehiculo_id, None)
+
+    async def cancelar_demo(self, vehiculo_id: int):
+        sesion = self.__sesiones.get(vehiculo_id)
+        if sesion is None:
+            raise ValueError("No hay ninguna DEMO activa en este vehículo para cancelar.")
+        return await self.detener_seguro(vehiculo_id, "WEB_DETENER_DEMO")
+
+    async def detener_seguro(self, vehiculo_id: int, origen: str = "SEGURIDAD_SESION"):
+        """Cancela una DEMO y emite DETENER si existe un comando configurado.
+
+        La respuesta confirma únicamente la orden aceptada por el servidor; la llegada
+        y ejecución física requieren telemetría del microcontrolador.
+        """
+        active = self.__sesiones.get(vehiculo_id)
+        if active is not None:
+            active.cancelar()
+        commands = await asyncio.to_thread(self.__comando_repo.obtener_detalle_por_vehiculo, vehiculo_id)
+        stop = next((c for c in commands if c.nombre.upper() == "DETENER" and c.esta_activo()), None)
+        if stop is None:
+            return {"vehiculo_id": vehiculo_id, "orden_detener": "SIN_COMANDO_CONFIGURADO",
+                    "ejecucion_fisica": "SIN_VERIFICAR"}
+        try:
+            await self.ejecutar_movimiento_individual(vehiculo_id, stop.id, origen)
+            return {"vehiculo_id": vehiculo_id, "orden_detener": "EMITIDA",
+                    "ejecucion_fisica": "SIN_VERIFICAR"}
+        except Exception:
+            logger.exception("No se pudo emitir la orden de seguridad al vehículo %s", vehiculo_id)
+            return {"vehiculo_id": vehiculo_id, "orden_detener": "ERROR_AL_EMITIR",
+                    "ejecucion_fisica": "SIN_VERIFICAR"}

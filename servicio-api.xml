@@ -1,0 +1,12 @@
+<service>
+  <id>ApiVehiculoIoT</id>
+  <name>API Vehiculo IoT Prod</name>
+  <description>Servicio de produccion para FastAPI con Uvicorn</description>
+  <executable>C:\inetpub\wwwroot\api_vehiculo_2\.venv\Scripts\uvicorn.exe</executable>
+  <arguments>main:app --host 127.0.0.1 --port 8000 --ws-per-message-deflate false</arguments>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10sec" />
+</service>
